@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -151,7 +152,8 @@ class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
         menuWindow?.showRemoveConfirm(anchorX = layoutParams?.x ?: 0, anchorY = layoutParams?.y ?: 0) {
             if (item is OverlayItem.WidgetSlot) {
                 try {
-                    AppWidgetManager.getInstance(this).deleteAppWidgetId(item.appWidgetId)
+                    AppWidgetHost(this, OverlayPanelView.APP_WIDGET_HOST_ID)
+                        .deleteAppWidgetId(item.appWidgetId)
                 } catch (_: Exception) {
                 }
             }

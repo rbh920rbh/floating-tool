@@ -19,11 +19,12 @@ class AppPickerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_app_picker)
 
         val apps = loadLauncherApps()
+        val activity = this
         findViewById<RecyclerView>(R.id.recycler_apps).apply {
-            layoutManager = LinearLayoutManager(this@AppPickerActivity)
+            layoutManager = LinearLayoutManager(activity)
             adapter = AppAdapter(apps) { entry ->
                 OverlayItemStore.add(
-                    this,
+                    activity,
                     OverlayItem.AppShortcut(
                         id = newOverlayItemId(),
                         packageName = entry.packageName,
