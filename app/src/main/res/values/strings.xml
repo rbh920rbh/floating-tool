@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Floating Tool</string>
+    <string name="main_title">Floating Tool</string>
+    <string name="main_subtitle">启动半透明悬浮框，长按可添加快捷方式或小组件（测试版）。</string>
+    <string name="overlay_permission_label">悬浮窗权限已授予</string>
+    <string name="open_overlay_settings">打开悬浮窗权限设置</string>
+    <string name="start_floating_panel">显示悬浮框</string>
+    <string name="stop_floating_panel">关闭悬浮框</string>
+    <string name="overlay_permission_required">请先授予「在其他应用上层显示」权限</string>
+    <string name="overlay_started">悬浮框已显示，可拖动；长按打开菜单</string>
+    <string name="overlay_stopped">悬浮框已关闭</string>
+    <string name="overlay_panel_description">可拖动的半透明悬浮面板</string>
+    <string name="overlay_panel_hint">长按\n添加</string>
+    <string name="menu_add_title">添加到主屏幕</string>
+    <string name="menu_pin_shortcut">应用快捷方式</string>
+    <string name="menu_pick_widget">Android 小组件</string>
+    <string name="menu_close_panel">关闭悬浮框</string>
+    <string name="hint_pin_shortcut">在列表中选择应用，按系统提示固定到主屏幕</string>
+    <string name="error_launch_intent">无法打开选择器</string>
+    <string name="error_widget_picker">当前系统不支持小组件选择器</string>
+    <string name="notification_channel_name">悬浮框服务</string>
+    <string name="notification_title">Floating Tool 正在运行</string>
+    <string name="notification_body">拖动悬浮框；长按添加内容</string>
+</resources>

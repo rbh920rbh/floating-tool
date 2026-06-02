@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_500">#6750A4</color>
+    <color name="purple_700">#4F378B</color>
+    <color name="teal_200">#03DAC5</color>
+    <color name="overlay_panel_fill">#996750A4</color>
+    <color name="overlay_panel_stroke">#E6FFFFFF</color>
+    <color name="overlay_text">#FFFFFFFF</color>
+</resources>

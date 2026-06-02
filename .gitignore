@@ -1,0 +1,16 @@
+# Android / Gradle
+.gradle/
+build/
+*/build/
+local.properties
+*.iml
+
+# IDE
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local signing overrides (CI uses ci/android keystore)
+key.properties
