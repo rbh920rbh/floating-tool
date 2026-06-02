@@ -218,20 +218,30 @@ class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
         windowManager.updateViewLayout(panel, params)
     }
 
+    private fun startPickerActivity(activityClass: Class<*>) {
+        val intent = Intent(this, activityClass).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            )
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "startPickerActivity failed", e)
+            Toast.makeText(applicationContext, R.string.error_launch_intent, Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun showAddMenu(anchorX: Int, anchorY: Int) {
         menuWindow?.show(anchorX, anchorY) { action ->
             when (action) {
                 OverlayMenuWindow.MenuAction.AddApp -> {
-                    val intent = Intent(this, AppPickerActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
+                    startPickerActivity(AppPickerActivity::class.java)
                 }
                 OverlayMenuWindow.MenuAction.AddWidget -> {
-                    val intent = Intent(this, WidgetPickerActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
+                    startPickerActivity(WidgetPickerActivity::class.java)
                 }
                 OverlayMenuWindow.MenuAction.ClosePanel -> stopSelf()
             }

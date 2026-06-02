@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Android 11+ 包可见性：否则只能查到极少数已声明的应用 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_PICK" />
+        </intent>
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_BIND" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -31,8 +45,10 @@
 
         <activity
             android:name=".WidgetPickerActivity"
+            android:excludeFromRecents="true"
             android:exported="false"
-            android:theme="@style/Theme.FloatingTool.Transparent" />
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FloatingTool" />
 
         <service
             android:name=".FloatingOverlayService"
