@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
@@ -90,12 +89,9 @@ class WidgetPickerActivity : AppCompatActivity() {
 
     private fun loadInstalledWidgetProviders(): List<WidgetProviderEntry> {
         val manager = AppWidgetManager.getInstance(this)
-        val providers = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.getInstalledProviders(PackageManager.GET_META_DATA)
-        } else {
-            @Suppress("DEPRECATION")
-            manager.installedProviders
-        }
+        @Suppress("DEPRECATION")
+        val providers = manager.installedProviders
+        val iconDensity = resources.displayMetrics.densityDpi
         return providers.mapNotNull { info ->
             val label = info.loadLabel(packageManager)?.toString()?.takeIf { it.isNotBlank() }
                 ?: info.provider.packageName
@@ -106,11 +102,16 @@ class WidgetPickerActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 info.provider.packageName
             }
+            val icon = try {
+                info.loadIcon(this, iconDensity)
+            } catch (_: Exception) {
+                packageManager.getApplicationIcon(info.provider.packageName)
+            }
             WidgetProviderEntry(
                 info = info,
                 label = label,
                 appLabel = appLabel,
-                icon = info.loadIcon(this, packageManager),
+                icon = icon,
             )
         }.sortedBy { "${it.appLabel}/${it.label}".lowercase() }
     }
