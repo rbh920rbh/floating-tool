@@ -6,40 +6,103 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.appwidget.AppWidgetManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.ContextThemeWrapper
+import android.view.GestureDetector
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.ArrayAdapter
-import android.widget.ListPopupWindow
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 
-class FloatingOverlayService : Service() {
+class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
 
     private lateinit var windowManager: WindowManager
-    private var overlayView: View? = null
+    private var overlayPanel: OverlayPanelView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
+    private var menuWindow: OverlayMenuWindow? = null
 
     private var initialX = 0
     private var initialY = 0
     private var touchStartX = 0f
     private var touchStartY = 0f
+    private var isDragging = false
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private lateinit var gestureDetector: GestureDetector
+
+    private val itemsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            refreshPanelContents()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        menuWindow = OverlayMenuWindow(this, windowManager)
+
+        val themedContext = ContextThemeWrapper(this, R.style.Theme_FloatingTool)
+        gestureDetector = GestureDetector(
+            themedContext,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: MotionEvent): Boolean = true
+
+                override fun onLongPress(e: MotionEvent) {
+                    if (!isDragging) {
+                        val params = layoutParams ?: return
+                        showAddMenu(params.x, params.y + (overlayPanel?.height ?: 0) / 2)
+                    }
+                }
+
+                override fun onScroll(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    distanceX: Float,
+                    distanceY: Float,
+                ): Boolean {
+                    val params = layoutParams ?: return false
+                    val panel = overlayPanel ?: return false
+                    if (e1 == null) return false
+                    if (!isDragging) {
+                        val dx = e2.rawX - e1.rawX
+                        val dy = e2.rawY - e1.rawY
+                        if (dx * dx + dy * dy < DRAG_SLOP_PX * DRAG_SLOP_PX) return false
+                        isDragging = true
+                        initialX = params.x
+                        initialY = params.y
+                        touchStartX = e1.rawX
+                        touchStartY = e1.rawY
+                    }
+                    params.x = initialX + (e2.rawX - touchStartX).toInt()
+                    params.y = initialY + (e2.rawY - touchStartY).toInt()
+                    windowManager.updateViewLayout(panel, params)
+                    return true
+                }
+            },
+        )
+
+        ContextCompat.registerReceiver(
+            this,
+            itemsChangedReceiver,
+            IntentFilter(AppPickerActivity.ACTION_OVERLAY_ITEMS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(applicationContext, R.string.overlay_permission_required, Toast.LENGTH_LONG).show()
@@ -57,6 +120,7 @@ class FloatingOverlayService : Service() {
         }
 
         try {
+            OverlayItemStore.load(this)
             showOverlay()
         } catch (e: Exception) {
             Log.e(TAG, "showOverlay failed", e)
@@ -66,9 +130,110 @@ class FloatingOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(itemsChangedReceiver)
+        } catch (_: Exception) {
+        }
+        overlayPanel?.stopWidgetHost()
+        menuWindow?.dismiss()
         removeOverlay()
         isRunning = false
         super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onRequestAddMenu(anchorX: Int, anchorY: Int) {
+        showAddMenu(anchorX, anchorY)
+    }
+
+    override fun onRequestRemoveItem(item: OverlayItem) {
+        menuWindow?.showRemoveConfirm(anchorX = layoutParams?.x ?: 0, anchorY = layoutParams?.y ?: 0) {
+            if (item is OverlayItem.WidgetSlot) {
+                try {
+                    AppWidgetManager.getInstance(this).deleteAppWidgetId(item.appWidgetId)
+                } catch (_: Exception) {
+                }
+            }
+            OverlayItemStore.remove(this, item.id)
+            refreshPanelContents()
+            Toast.makeText(this, R.string.item_removed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onPanelSizeChanged() {
+        mainHandler.post { updateOverlaySize() }
+    }
+
+    private fun showOverlay() {
+        if (overlayPanel != null) return
+
+        val themedContext = ContextThemeWrapper(this, R.style.Theme_FloatingTool)
+        val panel = OverlayPanelView(themedContext, this)
+        panel.startWidgetHost()
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 80
+            y = 200
+        }
+
+        panel.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> isDragging = false
+            }
+            gestureDetector.onTouchEvent(event)
+            true
+        }
+
+        windowManager.addView(panel, params)
+        overlayPanel = panel
+        layoutParams = params
+        refreshPanelContents()
+    }
+
+    private fun refreshPanelContents() {
+        OverlayItemStore.load(this)
+        overlayPanel?.bindItems(OverlayItemStore.all())
+    }
+
+    private fun updateOverlaySize() {
+        val panel = overlayPanel ?: return
+        val params = layoutParams ?: return
+        panel.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        params.width = WindowManager.LayoutParams.WRAP_CONTENT
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT
+        windowManager.updateViewLayout(panel, params)
+    }
+
+    private fun showAddMenu(anchorX: Int, anchorY: Int) {
+        menuWindow?.show(anchorX, anchorY) { action ->
+            when (action) {
+                OverlayMenuWindow.MenuAction.AddApp -> {
+                    val intent = Intent(this, AppPickerActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                }
+                OverlayMenuWindow.MenuAction.AddWidget -> {
+                    val intent = Intent(this, WidgetPickerActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                }
+                OverlayMenuWindow.MenuAction.ClosePanel -> stopSelf()
+            }
+        }
     }
 
     private fun promoteToForeground() {
@@ -90,117 +255,14 @@ class FloatingOverlayService : Service() {
         stopSelf()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    private fun showOverlay() {
-        if (overlayView != null) return
-
-        val themedContext = ContextThemeWrapper(this, R.style.Theme_FloatingTool)
-        val panel = LayoutInflater.from(themedContext).inflate(R.layout.overlay_floating_panel, null)
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 80
-            y = 200
-        }
-
-        panel.setOnTouchListener { _, event -> handleDrag(event, params, panel) }
-        panel.setOnLongClickListener {
-            showAddMenu()
-            true
-        }
-
-        windowManager.addView(panel, params)
-        overlayView = panel
-        layoutParams = params
-    }
-
-    private fun handleDrag(
-        event: MotionEvent,
-        params: WindowManager.LayoutParams,
-        panel: View,
-    ): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                initialX = params.x
-                initialY = params.y
-                touchStartX = event.rawX
-                touchStartY = event.rawY
-                return true
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                params.x = initialX + (event.rawX - touchStartX).toInt()
-                params.y = initialY + (event.rawY - touchStartY).toInt()
-                windowManager.updateViewLayout(panel, params)
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun showAddMenu() {
-        val anchor = overlayView ?: return
-        val options = listOf(
-            getString(R.string.menu_pin_shortcut),
-            getString(R.string.menu_pick_widget),
-            getString(R.string.menu_close_panel),
-        )
-        val popup = ListPopupWindow(ContextThemeWrapper(this, R.style.Theme_FloatingTool)).apply {
-            setAdapter(ArrayAdapter(this@FloatingOverlayService, android.R.layout.simple_list_item_1, options))
-            anchorView = anchor
-            isModal = true
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
-            }
-            setOnItemClickListener { _, _, position, _ ->
-                dismiss()
-                when (position) {
-                    0 -> launchPinShortcutPicker()
-                    1 -> launchWidgetPicker()
-                    2 -> stopSelf()
-                }
-            }
-        }
-        popup.show()
-    }
-
-    private fun launchPinShortcutPicker() {
-        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        val pickIntent = Intent.createChooser(launcherIntent, getString(R.string.menu_pin_shortcut))
-        pickIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            startActivity(pickIntent)
-            Toast.makeText(this, R.string.hint_pin_shortcut, Toast.LENGTH_LONG).show()
-        } catch (_: Exception) {
-            Toast.makeText(this, R.string.error_launch_intent, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun launchWidgetPicker() {
-        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            startActivity(pickIntent)
-        } catch (_: Exception) {
-            Toast.makeText(this, R.string.error_widget_picker, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun removeOverlay() {
-        overlayView?.let { windowManager.removeView(it) }
-        overlayView = null
+        overlayPanel?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (_: Exception) {
+            }
+        }
+        overlayPanel = null
         layoutParams = null
     }
 
@@ -228,14 +290,14 @@ class FloatingOverlayService : Service() {
             getString(R.string.notification_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         )
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     companion object {
         private const val TAG = "FloatingOverlayService"
         private const val CHANNEL_ID = "floating_overlay"
         private const val NOTIFICATION_ID = 1001
+        private const val DRAG_SLOP_PX = 12f
 
         @Volatile
         var isRunning: Boolean = false

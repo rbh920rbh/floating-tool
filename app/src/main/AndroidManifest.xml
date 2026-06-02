@@ -24,6 +24,16 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AppPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.FloatingTool" />
+
+        <activity
+            android:name=".WidgetPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.FloatingTool.Transparent" />
+
         <service
             android:name=".FloatingOverlayService"
             android:exported="false"
