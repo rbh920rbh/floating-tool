@@ -6,7 +6,6 @@
     android:background="@drawable/overlay_panel_background"
     android:contentDescription="@string/overlay_panel_description"
     android:elevation="8dp"
-    android:foreground="?attr/selectableItemBackground"
     android:padding="12dp">
 
     <TextView

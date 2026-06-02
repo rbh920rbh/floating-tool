@@ -18,7 +18,11 @@ class MainActivity : AppCompatActivity() {
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { /* optional for foreground service notification */ }
+    ) { granted ->
+        if (granted && Settings.canDrawOverlays(this)) {
+            toggleOverlay()
+        }
+    }
 
     private val overlaySettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -75,13 +79,24 @@ class MainActivity : AppCompatActivity() {
         if (FloatingOverlayService.isRunning) {
             stopService(Intent(this, FloatingOverlayService::class.java))
             Toast.makeText(this, R.string.overlay_stopped, Toast.LENGTH_SHORT).show()
-        } else {
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, FloatingOverlayService::class.java),
-            )
-            Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
+            refreshUi()
+            return
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            Toast.makeText(this, R.string.notification_permission_hint, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, FloatingOverlayService::class.java),
+        )
+        Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
         refreshUi()
     }
 

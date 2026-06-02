@@ -4,12 +4,16 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.appwidget.AppWidgetManager
 import android.content.Intent
-import android.view.ContextThemeWrapper
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
+import android.util.Log
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -19,7 +23,7 @@ import android.widget.ArrayAdapter
 import android.widget.ListPopupWindow
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
-import android.app.Service
+import androidx.core.app.ServiceCompat
 
 class FloatingOverlayService : Service() {
 
@@ -36,8 +40,29 @@ class FloatingOverlayService : Service() {
         super.onCreate()
         isRunning = true
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        startForeground(NOTIFICATION_ID, buildNotification())
-        showOverlay()
+
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(applicationContext, R.string.overlay_permission_required, Toast.LENGTH_LONG).show()
+            stopSelfSafely()
+            return
+        }
+
+        try {
+            promoteToForeground()
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed", e)
+            Toast.makeText(applicationContext, R.string.error_foreground_service, Toast.LENGTH_LONG).show()
+            stopSelfSafely()
+            return
+        }
+
+        try {
+            showOverlay()
+        } catch (e: Exception) {
+            Log.e(TAG, "showOverlay failed", e)
+            Toast.makeText(applicationContext, R.string.error_overlay_failed, Toast.LENGTH_LONG).show()
+            stopSelfSafely()
+        }
     }
 
     override fun onDestroy() {
@@ -46,13 +71,32 @@ class FloatingOverlayService : Service() {
         super.onDestroy()
     }
 
+    private fun promoteToForeground() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun stopSelfSafely() {
+        isRunning = false
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun showOverlay() {
         if (overlayView != null) return
 
-        val inflater = getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater
-        val panel = inflater.inflate(R.layout.overlay_floating_panel, null)
+        val themedContext = ContextThemeWrapper(this, R.style.Theme_FloatingTool)
+        val panel = LayoutInflater.from(themedContext).inflate(R.layout.overlay_floating_panel, null)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -189,6 +233,7 @@ class FloatingOverlayService : Service() {
     }
 
     companion object {
+        private const val TAG = "FloatingOverlayService"
         private const val CHANNEL_ID = "floating_overlay"
         private const val NOTIFICATION_ID = 1001
 
