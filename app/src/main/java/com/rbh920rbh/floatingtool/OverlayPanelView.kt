@@ -196,6 +196,17 @@ class OverlayPanelView(
     }
 
     private fun launchSubmenuShortcut(item: OverlayItem.AppSubmenuShortcut) {
+        val uri = item.launchIntentUri
+        if (!uri.isNullOrBlank()) {
+            try {
+                val intent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {
+            }
+        }
         val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return
         val opts = android.app.ActivityOptions.makeBasic().toBundle()
         try {

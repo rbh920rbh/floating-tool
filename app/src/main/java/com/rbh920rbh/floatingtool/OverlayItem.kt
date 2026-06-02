@@ -18,6 +18,8 @@ sealed class OverlayItem {
         val packageName: String,
         val shortcutId: String,
         val label: String,
+        /** 从 APK shortcuts.xml 解析时使用 Intent URI 启动 */
+        val launchIntentUri: String? = null,
     ) : OverlayItem()
 
     data class WidgetSlot(
@@ -53,6 +55,7 @@ object OverlayItemStore {
                         packageName = obj.getString("packageName"),
                         shortcutId = obj.getString("shortcutId"),
                         label = obj.getString("label"),
+                        launchIntentUri = obj.optString("launchIntentUri").takeIf { it.isNotBlank() },
                     ),
                 )
                 "widget" -> items.add(
@@ -82,6 +85,7 @@ object OverlayItemStore {
                     obj.put("packageName", item.packageName)
                     obj.put("shortcutId", item.shortcutId)
                     obj.put("label", item.label)
+                    item.launchIntentUri?.let { obj.put("launchIntentUri", it) }
                 }
                 is OverlayItem.WidgetSlot -> {
                     obj.put("type", "widget")

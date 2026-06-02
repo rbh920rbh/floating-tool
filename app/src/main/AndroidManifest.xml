@@ -22,9 +22,8 @@
     </queries>
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission
-        android:name="android.permission.ACCESS_SHORTCUTS"
-        android:minSdkVersion="30" />
+    <!-- Android 11+ 读取其他应用静态/动态快捷方式（安装时自动授予） -->
+    <uses-permission android:name="android.permission.ACCESS_SHORTCUTS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

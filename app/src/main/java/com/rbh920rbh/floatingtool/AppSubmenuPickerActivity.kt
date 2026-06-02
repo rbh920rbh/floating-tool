@@ -1,5 +1,6 @@
 package com.rbh920rbh.floatingtool
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
@@ -23,15 +24,16 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 /**
- * 两步：先选应用，再选该应用在桌面长按菜单中暴露的快捷方式（LauncherApps）。
+ * 两步：先选应用，再选该应用在桌面长按菜单中暴露的快捷方式。
+ * 优先 [LauncherApps]（需系统授权）；否则解析 APK 内 shortcuts.xml。
  */
 class AppSubmenuPickerActivity : AppCompatActivity() {
 
     private lateinit var adapter: RowAdapter
     private var appEntries: List<AppPickerActivity.LauncherEntry> = emptyList()
     private var shortcutEntries: List<ShortcutEntry> = emptyList()
-    private var selectedPackage: String? = null
     private var showingShortcuts = false
+    private var hasShortcutHostPermission = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +44,11 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        ensureShortcutAccessPermission()
+
+        val launcherApps = getSystemService(LauncherApps::class.java)
+        hasShortcutHostPermission = launcherApps?.hasShortcutHostPermission() == true
 
         adapter = RowAdapter(emptyList()) { entry -> onRowClicked(entry) }
         findViewById<RecyclerView>(R.id.recycler_apps).apply {
@@ -74,18 +81,30 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         super.onBackPressed()
     }
 
+    private fun ensureShortcutAccessPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_SHORTCUTS)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_SHORTCUTS), REQUEST_ACCESS_SHORTCUTS)
+    }
+
     private fun showAppList() {
         showingShortcuts = false
-        selectedPackage = null
         findViewById<TextView>(R.id.tv_picker_title).text = getString(R.string.picker_submenu_pick_app)
-        findViewById<TextView>(R.id.tv_picker_subtitle).text =
-            getString(R.string.picker_app_count, appEntries.size)
+        val hint = if (hasShortcutHostPermission) {
+            getString(R.string.submenu_source_launcher, appEntries.size)
+        } else {
+            getString(R.string.submenu_source_manifest, appEntries.size)
+        }
+        findViewById<TextView>(R.id.tv_picker_subtitle).text = hint
         adapter.submitApps(appEntries)
     }
 
     private fun showShortcutList(packageName: String, appLabel: String) {
         showingShortcuts = true
-        selectedPackage = packageName
         shortcutEntries = loadShortcuts(packageName)
         findViewById<TextView>(R.id.tv_picker_title).text =
             getString(R.string.picker_submenu_pick_item, appLabel)
@@ -111,6 +130,7 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
                         packageName = entry.data.packageName,
                         shortcutId = entry.data.shortcutId,
                         label = entry.data.label,
+                        launchIntentUri = entry.data.launchIntentUri,
                     ),
                 )
                 sendItemsChanged()
@@ -168,6 +188,30 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
 
     @RequiresApi(Build.VERSION_CODES.N_MR1)
     private fun loadShortcuts(packageName: String): List<ShortcutEntry> {
+        val merged = linkedMapOf<String, ShortcutEntry>()
+
+        if (hasShortcutHostPermission) {
+            loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
+        }
+
+        ManifestShortcutParser.loadStaticShortcuts(packageManager, packageName).forEach { parsed ->
+            merged.putIfAbsent(
+                parsed.shortcutId,
+                ShortcutEntry(
+                    packageName = packageName,
+                    shortcutId = parsed.shortcutId,
+                    label = parsed.label,
+                    launchIntentUri = parsed.launchIntentUri,
+                    icon = loadAppIcon(packageName),
+                ),
+            )
+        }
+
+        return merged.values.sortedBy { it.label.lowercase() }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N_MR1)
+    private fun loadLauncherShortcuts(packageName: String): List<ShortcutEntry> {
         val launcherApps = getSystemService(LauncherApps::class.java) ?: return emptyList()
         val user = Process.myUserHandle()
         val query = LauncherApps.ShortcutQuery().apply {
@@ -192,9 +236,18 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
                 packageName = packageName,
                 shortcutId = shortcut.id,
                 label = label,
+                launchIntentUri = null,
                 icon = loadShortcutIcon(launcherApps, shortcut, user),
             )
-        }.sortedBy { it.label.lowercase() }
+        }
+    }
+
+    private fun loadAppIcon(packageName: String): android.graphics.drawable.Drawable {
+        return try {
+            packageManager.getApplicationIcon(packageName)
+        } catch (_: Exception) {
+            ContextCompat.getDrawable(this, R.drawable.ic_launcher_foreground)!!
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.N_MR1)
@@ -208,11 +261,7 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
             launcherApps.getShortcutIconDrawable(shortcut, density)
         } catch (_: Exception) {
             null
-        } ?: try {
-            packageManager.getApplicationIcon(shortcut.`package`)
-        } catch (_: Exception) {
-            ContextCompat.getDrawable(this, R.drawable.ic_launcher_foreground)
-        }!!
+        } ?: loadAppIcon(shortcut.`package`)
     }
 
     private fun sendItemsChanged() {
@@ -223,6 +272,7 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         val packageName: String,
         val shortcutId: String,
         val label: String,
+        val launchIntentUri: String?,
         val icon: android.graphics.drawable.Drawable,
     )
 
@@ -272,5 +322,9 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         }
 
         override fun getItemCount(): Int = rows.size
+    }
+
+    companion object {
+        private const val REQUEST_ACCESS_SHORTCUTS = 2002
     }
 }

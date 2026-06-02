@@ -44,6 +44,8 @@
     <string name="picker_submenu_pick_app">先选择应用</string>
     <string name="picker_submenu_pick_item">选择「%1$s」的菜单项</string>
     <string name="picker_submenu_count">共 %1$d 个菜单项</string>
-    <string name="error_no_submenu_items">该应用未暴露快捷菜单，或系统未授权读取</string>
+    <string name="error_no_submenu_items">该应用没有可添加的菜单项（部分应用不向第三方开放）</string>
+    <string name="submenu_source_launcher">共 %1$d 个应用 · 已获系统快捷方式权限</string>
+    <string name="submenu_source_manifest">共 %1$d 个应用 · 将读取应用内声明的静态菜单</string>
     <string name="error_submenu_api">应用菜单项需要 Android 7.1 及以上</string>
 </resources>

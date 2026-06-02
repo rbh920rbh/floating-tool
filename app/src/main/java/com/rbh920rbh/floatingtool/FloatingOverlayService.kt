@@ -258,7 +258,7 @@ class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
                     startPickerActivity(AppPickerActivity::class.java)
                 }
                 OverlayMenuWindow.MenuAction.AddSubmenu -> {
-                    startPickerViaMain(MainActivity.ACTION_OPEN_SUBMENU_PICKER)
+                    startPickerActivity(AppSubmenuPickerActivity::class.java)
                 }
                 OverlayMenuWindow.MenuAction.AddWidget -> {
                     startPickerViaMain(MainActivity.ACTION_OPEN_WIDGET_PICKER)
