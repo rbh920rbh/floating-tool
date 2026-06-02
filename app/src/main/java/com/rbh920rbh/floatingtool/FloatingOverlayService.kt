@@ -234,14 +234,34 @@ class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
         }
     }
 
+    /** 经 MainActivity 中转，避免后台直接拉起选择页被系统拦截 */
+    private fun startPickerViaMain(action: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            this.action = action
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            )
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "startPickerViaMain failed", e)
+            Toast.makeText(applicationContext, R.string.error_launch_intent, Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun showAddMenu(anchorX: Int, anchorY: Int) {
         menuWindow?.show(anchorX, anchorY) { action ->
             when (action) {
                 OverlayMenuWindow.MenuAction.AddApp -> {
                     startPickerActivity(AppPickerActivity::class.java)
                 }
+                OverlayMenuWindow.MenuAction.AddSubmenu -> {
+                    startPickerViaMain(MainActivity.ACTION_OPEN_SUBMENU_PICKER)
+                }
                 OverlayMenuWindow.MenuAction.AddWidget -> {
-                    startPickerActivity(WidgetPickerActivity::class.java)
+                    startPickerViaMain(MainActivity.ACTION_OPEN_WIDGET_PICKER)
                 }
                 OverlayMenuWindow.MenuAction.ClosePanel -> stopSelf()
             }

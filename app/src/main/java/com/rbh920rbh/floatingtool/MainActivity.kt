@@ -34,6 +34,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        handlePickerIntent(intent)
+
         requestNotificationPermissionIfNeeded()
 
         findViewById<MaterialButton>(R.id.btn_overlay_permission).setOnClickListener {
@@ -52,9 +54,26 @@ class MainActivity : AppCompatActivity() {
         refreshUi()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handlePickerIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         refreshUi()
+    }
+
+    private fun handlePickerIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_OPEN_WIDGET_PICKER -> {
+                startActivity(Intent(this, WidgetPickerActivity::class.java))
+            }
+            ACTION_OPEN_SUBMENU_PICKER -> {
+                startActivity(Intent(this, AppSubmenuPickerActivity::class.java))
+            }
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -98,6 +117,11 @@ class MainActivity : AppCompatActivity() {
         )
         Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
         refreshUi()
+    }
+
+    companion object {
+        const val ACTION_OPEN_WIDGET_PICKER = "com.rbh920rbh.floatingtool.OPEN_WIDGET_PICKER"
+        const val ACTION_OPEN_SUBMENU_PICKER = "com.rbh920rbh.floatingtool.OPEN_SUBMENU_PICKER"
     }
 
     private fun refreshUi() {

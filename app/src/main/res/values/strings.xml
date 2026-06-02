@@ -14,6 +14,7 @@
     <string name="overlay_panel_hint">长按\n添加</string>
     <string name="menu_add_title">添加到主屏幕</string>
     <string name="menu_pin_shortcut">应用快捷方式</string>
+    <string name="menu_app_submenu">应用菜单项</string>
     <string name="menu_pick_widget">Android 小组件</string>
     <string name="menu_close_panel">关闭悬浮框</string>
     <string name="hint_pin_shortcut">在列表中选择应用，按系统提示固定到主屏幕</string>
@@ -36,4 +37,13 @@
     <string name="widget_unavailable">小组件不可用</string>
     <string name="menu_remove_item">移除</string>
     <string name="item_removed">已移除</string>
+    <string name="picker_widget_title">选择小组件</string>
+    <string name="picker_widget_count">共 %1$d 个可用小组件</string>
+    <string name="picker_widget_search_hint">搜索小组件或应用名</string>
+    <string name="error_no_widgets">未找到可用小组件</string>
+    <string name="picker_submenu_pick_app">先选择应用</string>
+    <string name="picker_submenu_pick_item">选择「%1$s」的菜单项</string>
+    <string name="picker_submenu_count">共 %1$d 个菜单项</string>
+    <string name="error_no_submenu_items">该应用未暴露快捷菜单，或系统未授权读取</string>
+    <string name="error_submenu_api">应用菜单项需要 Android 7.1 及以上</string>
 </resources>

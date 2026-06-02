@@ -12,6 +12,11 @@
         android:text="@string/menu_pin_shortcut" />
 
     <TextView
+        android:id="@+id/menu_add_submenu"
+        style="@style/OverlayMenuItem"
+        android:text="@string/menu_app_submenu" />
+
+    <TextView
         android:id="@+id/menu_add_widget"
         style="@style/OverlayMenuItem"
         android:text="@string/menu_pick_widget" />

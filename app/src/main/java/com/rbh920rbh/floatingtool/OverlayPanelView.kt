@@ -5,6 +5,8 @@ import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.LauncherApps
+import android.os.Process
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.Gravity
@@ -105,6 +107,7 @@ class OverlayPanelView(
     private fun createItemView(item: OverlayItem): View {
         return when (item) {
             is OverlayItem.AppShortcut -> createAppView(item)
+            is OverlayItem.AppSubmenuShortcut -> createSubmenuShortcutView(item)
             is OverlayItem.WidgetSlot -> createWidgetView(item)
         }
     }
@@ -152,6 +155,60 @@ class OverlayPanelView(
             true
         }
         return cell
+    }
+
+    private fun createSubmenuShortcutView(item: OverlayItem.AppSubmenuShortcut): View {
+        val cell = LinearLayout(context).apply {
+            orientation = VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+        val icon = ImageView(context).apply {
+            layoutParams = LayoutParams(dp(48), dp(48))
+            try {
+                setImageDrawable(context.packageManager.getApplicationIcon(item.packageName))
+            } catch (_: Exception) {
+                setImageResource(R.drawable.ic_launcher_foreground)
+            }
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        val label = TextView(context).apply {
+            text = item.label
+            setTextColor(ContextCompat.getColor(context, R.color.overlay_text))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            maxLines = 2
+            gravity = Gravity.CENTER
+        }
+        cell.addView(icon)
+        cell.addView(
+            label,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(2)
+            },
+        )
+        cell.minimumWidth = dp(72)
+        cell.setOnClickListener { launchSubmenuShortcut(item) }
+        cell.setOnLongClickListener {
+            callbacks.onRequestRemoveItem(item)
+            true
+        }
+        return cell
+    }
+
+    private fun launchSubmenuShortcut(item: OverlayItem.AppSubmenuShortcut) {
+        val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return
+        val opts = android.app.ActivityOptions.makeBasic().toBundle()
+        try {
+            launcherApps.startShortcut(
+                item.packageName,
+                item.shortcutId,
+                null,
+                opts,
+                Process.myUserHandle(),
+            )
+        } catch (_: Exception) {
+            launchApp(item.packageName)
+        }
     }
 
     private fun createWidgetView(item: OverlayItem.WidgetSlot): View {

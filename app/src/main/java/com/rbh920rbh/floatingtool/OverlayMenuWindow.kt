@@ -36,6 +36,7 @@ class OverlayMenuWindow(
         }
 
         bindMenuItem(menu, R.id.menu_add_app, MenuAction.AddApp, onPick)
+        bindMenuItem(menu, R.id.menu_add_submenu, MenuAction.AddSubmenu, onPick)
         bindMenuItem(menu, R.id.menu_add_widget, MenuAction.AddWidget, onPick)
         bindMenuItem(menu, R.id.menu_close_panel, MenuAction.ClosePanel, onPick)
 
@@ -93,6 +94,7 @@ class OverlayMenuWindow(
 
     enum class MenuAction {
         AddApp,
+        AddSubmenu,
         AddWidget,
         ClosePanel,
     }

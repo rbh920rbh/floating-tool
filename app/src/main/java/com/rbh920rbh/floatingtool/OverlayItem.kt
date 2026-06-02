@@ -12,6 +12,14 @@ sealed class OverlayItem {
         val label: String,
     ) : OverlayItem()
 
+    /** 应用桌面长按菜单中的快捷方式（二级菜单项） */
+    data class AppSubmenuShortcut(
+        override val id: String,
+        val packageName: String,
+        val shortcutId: String,
+        val label: String,
+    ) : OverlayItem()
+
     data class WidgetSlot(
         override val id: String,
         val appWidgetId: Int,
@@ -39,6 +47,14 @@ object OverlayItemStore {
                         label = obj.getString("label"),
                     ),
                 )
+                "submenu" -> items.add(
+                    OverlayItem.AppSubmenuShortcut(
+                        id = obj.getString("id"),
+                        packageName = obj.getString("packageName"),
+                        shortcutId = obj.getString("shortcutId"),
+                        label = obj.getString("label"),
+                    ),
+                )
                 "widget" -> items.add(
                     OverlayItem.WidgetSlot(
                         id = obj.getString("id"),
@@ -58,6 +74,13 @@ object OverlayItemStore {
                     obj.put("type", "app")
                     obj.put("id", item.id)
                     obj.put("packageName", item.packageName)
+                    obj.put("label", item.label)
+                }
+                is OverlayItem.AppSubmenuShortcut -> {
+                    obj.put("type", "submenu")
+                    obj.put("id", item.id)
+                    obj.put("packageName", item.packageName)
+                    obj.put("shortcutId", item.shortcutId)
                     obj.put("label", item.label)
                 }
                 is OverlayItem.WidgetSlot -> {
