@@ -115,58 +115,92 @@ object ManifestShortcutParser {
         return null
     }
 
+    /**
+     * shortcuts.xml 里常见写法是 `<intent android:action android:targetPackage android:targetClass>`；
+     * 多个 intent 时系统取最后一个作为入口（见 App Shortcuts 文档）。
+     */
     private fun readShortcutIntent(parser: XmlPullParser, packageName: String): String? {
-        val startDepth = parser.depth
+        val shortcutDepth = parser.depth
         var event = parser.next()
-        while (event != XmlPullParser.END_DOCUMENT && parser.depth > startDepth) {
+        var lastUri: String? = null
+        while (event != XmlPullParser.END_DOCUMENT && parser.depth > shortcutDepth) {
             if (event == XmlPullParser.START_TAG && parser.name == TAG_INTENT) {
-                val intent = Intent()
-                var inner = parser.next()
-                while (inner != XmlPullParser.END_DOCUMENT && parser.depth > startDepth + 1) {
-                    if (inner == XmlPullParser.START_TAG) {
-                        when (parser.name) {
-                            TAG_ACTION -> intent.action = parser.nextText()
-                            TAG_CATEGORY -> intent.addCategory(parser.nextText())
-                            TAG_COMPONENT -> {
-                                val cls = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
-                                if (!cls.isNullOrBlank()) {
-                                    intent.setClassName(packageName, cls)
-                                }
-                            }
-                            TAG_DATA -> {
-                                val scheme = parser.getAttributeValue(ANDROID_NS, ATTR_SCHEME)
-                                val host = parser.getAttributeValue(ANDROID_NS, "host")
-                                val path = parser.getAttributeValue(ANDROID_NS, "path")
-                                if (!scheme.isNullOrBlank()) {
-                                    val uri = buildString {
-                                        append(scheme)
-                                        append("://")
-                                        if (!host.isNullOrBlank()) append(host)
-                                        if (!path.isNullOrBlank()) append(path)
-                                    }
-                                    intent.data = android.net.Uri.parse(uri)
-                                }
-                            }
-                            TAG_EXTRA -> {
-                                val name = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
-                                val value = parser.getAttributeValue(ANDROID_NS, ATTR_VALUE)
-                                if (!name.isNullOrBlank() && value != null) {
-                                    intent.putExtra(name, value)
-                                }
-                            }
-                        }
-                    }
-                    inner = parser.next()
+                parseIntentElement(parser, packageName)?.let { intent ->
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    lastUri = intent.toUri(Intent.URI_INTENT_SCHEME)
                 }
-                if (intent.component == null && intent.`package` == null) {
-                    intent.setPackage(packageName)
-                }
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                return intent.toUri(Intent.URI_INTENT_SCHEME)
             }
             event = parser.next()
         }
-        return null
+        return lastUri
+    }
+
+    private fun parseIntentElement(parser: XmlPullParser, packageName: String): Intent? {
+        val intent = Intent()
+        val action = parser.getAttributeValue(ANDROID_NS, ATTR_ACTION)
+        val targetPackage = parser.getAttributeValue(ANDROID_NS, ATTR_TARGET_PACKAGE)
+        val targetClass = parser.getAttributeValue(ANDROID_NS, ATTR_TARGET_CLASS)
+        if (!action.isNullOrBlank()) intent.action = action
+        when {
+            !targetPackage.isNullOrBlank() && !targetClass.isNullOrBlank() ->
+                intent.setClassName(targetPackage, targetClass)
+            !targetClass.isNullOrBlank() ->
+                intent.setClassName(packageName, targetClass)
+            !targetPackage.isNullOrBlank() ->
+                intent.setPackage(targetPackage)
+        }
+
+        val intentDepth = parser.depth
+        var event = parser.next()
+        while (event != XmlPullParser.END_DOCUMENT && parser.depth > intentDepth) {
+            if (event == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    TAG_ACTION -> if (intent.action.isNullOrBlank()) {
+                        intent.action = parser.nextText()
+                    }
+                    TAG_CATEGORY -> intent.addCategory(parser.nextText())
+                    TAG_COMPONENT -> {
+                        val cls = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
+                        if (!cls.isNullOrBlank()) {
+                            intent.setClassName(packageName, cls)
+                        }
+                    }
+                    TAG_DATA -> {
+                        val scheme = parser.getAttributeValue(ANDROID_NS, ATTR_SCHEME)
+                        val host = parser.getAttributeValue(ANDROID_NS, "host")
+                        val path = parser.getAttributeValue(ANDROID_NS, "path")
+                        if (!scheme.isNullOrBlank()) {
+                            val uri = buildString {
+                                append(scheme)
+                                append("://")
+                                if (!host.isNullOrBlank()) append(host)
+                                if (!path.isNullOrBlank()) append(path)
+                            }
+                            intent.data = android.net.Uri.parse(uri)
+                        }
+                    }
+                    TAG_EXTRA -> {
+                        val name = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
+                        val value = parser.getAttributeValue(ANDROID_NS, ATTR_VALUE)
+                        if (!name.isNullOrBlank() && value != null) {
+                            intent.putExtra(name, value)
+                        }
+                    }
+                }
+            }
+            event = parser.next()
+        }
+
+        if (intent.action.isNullOrBlank() && intent.component == null && intent.`package` == null) {
+            return null
+        }
+        if (intent.component == null && intent.`package` == null) {
+            intent.setPackage(packageName)
+        }
+        if (intent.component == null) {
+            intent.addCategory(Intent.CATEGORY_DEFAULT)
+        }
+        return intent
     }
 
     private const val META_SHORTCUTS = "android.app.shortcuts"
@@ -185,4 +219,7 @@ object ManifestShortcutParser {
     private const val ATTR_SCHEME = "scheme"
     private const val ATTR_NAME = "name"
     private const val ATTR_VALUE = "value"
+    private const val ATTR_ACTION = "action"
+    private const val ATTR_TARGET_PACKAGE = "targetPackage"
+    private const val ATTR_TARGET_CLASS = "targetClass"
 }

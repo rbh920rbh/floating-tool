@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.os.Build
 import android.os.Bundle
-import android.os.Process
+import android.os.UserHandle
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -33,6 +33,8 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private var appEntries: List<AppPickerActivity.LauncherEntry> = emptyList()
     private var shortcutEntries: List<ShortcutEntry> = emptyList()
     private var showingShortcuts = false
+    private var selectedPackageName: String? = null
+    private var selectedAppLabel: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,8 +85,24 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         requestPermissions(arrayOf(PERMISSION_ACCESS_SHORTCUTS), REQUEST_ACCESS_SHORTCUTS)
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_ACCESS_SHORTCUTS) return
+        val pkg = selectedPackageName ?: return
+        val label = selectedAppLabel ?: return
+        if (showingShortcuts) {
+            showShortcutList(pkg, label)
+        }
+    }
+
     private fun showAppList() {
         showingShortcuts = false
+        selectedPackageName = null
+        selectedAppLabel = null
         findViewById<View>(R.id.tv_empty_state).visibility = View.GONE
         findViewById<RecyclerView>(R.id.recycler_apps).visibility = View.VISIBLE
         findViewById<TextView>(R.id.tv_picker_title).text = getString(R.string.picker_submenu_pick_app)
@@ -95,6 +113,8 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
 
     private fun showShortcutList(packageName: String, appLabel: String) {
         showingShortcuts = true
+        selectedPackageName = packageName
+        selectedAppLabel = appLabel
         shortcutEntries = loadShortcuts(packageName)
         findViewById<TextView>(R.id.tv_picker_title).text =
             getString(R.string.picker_submenu_pick_item, appLabel)
@@ -202,20 +222,17 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private fun loadShortcuts(packageName: String): List<ShortcutEntry> {
         val merged = linkedMapOf<String, ShortcutEntry>()
 
-        loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
-
         ManifestShortcutParser.loadStaticShortcuts(packageManager, packageName).forEach { parsed ->
-            merged.putIfAbsent(
-                parsed.shortcutId,
-                ShortcutEntry(
-                    packageName = packageName,
-                    shortcutId = parsed.shortcutId,
-                    label = parsed.label,
-                    launchIntentUri = parsed.launchIntentUri,
-                    icon = loadAppIcon(packageName),
-                ),
+            merged[parsed.shortcutId] = ShortcutEntry(
+                packageName = packageName,
+                shortcutId = parsed.shortcutId,
+                label = parsed.label,
+                launchIntentUri = parsed.launchIntentUri,
+                icon = loadAppIcon(packageName),
             )
         }
+
+        loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
 
         return merged.values.sortedBy { it.label.lowercase() }
     }
@@ -223,65 +240,67 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     @RequiresApi(Build.VERSION_CODES.N_MR1)
     private fun loadLauncherShortcuts(packageName: String): List<ShortcutEntry> {
         val launcherApps = getSystemService(LauncherApps::class.java) ?: return emptyList()
-        val user = Process.myUserHandle()
+        if (!launcherApps.hasShortcutHostPermission()) {
+            Log.w(TAG, "hasShortcutHostPermission=false pkg=$packageName")
+            return emptyList()
+        }
+        val uid = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0),
+                ).uid
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getApplicationInfo(packageName, 0).uid
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getApplicationInfo failed pkg=$packageName", e)
+            return emptyList()
+        }
+        val user = UserHandle.getUserHandleForUid(uid)
         val merged = linkedMapOf<String, ShortcutEntry>()
 
-        for (flags in shortcutQueryFlagSets()) {
-            val query = LauncherApps.ShortcutQuery().apply {
-                setPackage(packageName)
-                setQueryFlags(flags)
-            }
-            val shortcuts = try {
-                launcherApps.getShortcuts(query, user)
-            } catch (e: SecurityException) {
-                Log.w(TAG, "getShortcuts denied pkg=$packageName flags=$flags", e)
-                null
-            } catch (e: Exception) {
-                Log.w(TAG, "getShortcuts failed pkg=$packageName flags=$flags", e)
-                null
-            } ?: continue
+        val query = LauncherApps.ShortcutQuery().apply {
+            setPackage(packageName)
+            setQueryFlags(shortcutQueryFlags())
+        }
+        val shortcuts = try {
+            launcherApps.getShortcuts(query, user)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "getShortcuts denied pkg=$packageName", e)
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "getShortcuts failed pkg=$packageName", e)
+            null
+        } ?: emptyList()
 
-            for (shortcut in shortcuts) {
-                if (!shortcut.isEnabled) continue
-                val label = shortcut.shortLabel?.toString()?.takeIf { it.isNotBlank() }
-                    ?: shortcut.longLabel?.toString()?.takeIf { it.isNotBlank() }
-                    ?: shortcut.id
-                merged.putIfAbsent(
-                    shortcut.id,
-                    ShortcutEntry(
-                        packageName = packageName,
-                        shortcutId = shortcut.id,
-                        label = label,
-                        launchIntentUri = extractLaunchUri(shortcut),
-                        icon = loadShortcutIcon(launcherApps, shortcut, user),
-                    ),
-                )
-            }
+        for (shortcut in shortcuts) {
+            if (!shortcut.isEnabled) continue
+            val label = shortcut.shortLabel?.toString()?.takeIf { it.isNotBlank() }
+                ?: shortcut.longLabel?.toString()?.takeIf { it.isNotBlank() }
+                ?: shortcut.id
+            merged[shortcut.id] = ShortcutEntry(
+                packageName = packageName,
+                shortcutId = shortcut.id,
+                label = label,
+                launchIntentUri = extractLaunchUri(shortcut),
+                icon = loadShortcutIcon(launcherApps, shortcut, user),
+            )
         }
 
         return merged.values.toList()
     }
 
-    private fun shortcutQueryFlagSets(): List<Int> {
-        val list = mutableListOf(
-            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST,
-            LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC,
-            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
-            LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED,
-            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
-                LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
-                LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
-        )
+    private fun shortcutQueryFlags(): Int {
+        var flags = LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            list.add(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER)
-            list.add(
-                LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER,
-            )
+            flags = flags or LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER
         }
-        return list.distinct()
+        return flags
     }
 
     @RequiresApi(Build.VERSION_CODES.N_MR1)
@@ -289,7 +308,7 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val intents = shortcut.intents
             if (!intents.isNullOrEmpty()) {
-                return intents.first().apply {
+                return intents.last().apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }.toUri(Intent.URI_INTENT_SCHEME)
             }

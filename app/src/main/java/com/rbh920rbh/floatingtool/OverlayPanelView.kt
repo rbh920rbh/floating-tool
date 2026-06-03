@@ -196,6 +196,21 @@ class OverlayPanelView(
     }
 
     private fun launchSubmenuShortcut(item: OverlayItem.AppSubmenuShortcut) {
+        val launcherApps = context.getSystemService(LauncherApps::class.java)
+        if (launcherApps != null) {
+            val opts = android.app.ActivityOptions.makeBasic().toBundle()
+            try {
+                launcherApps.startShortcut(
+                    item.packageName,
+                    item.shortcutId,
+                    null,
+                    opts,
+                    Process.myUserHandle(),
+                )
+                return
+            } catch (_: Exception) {
+            }
+        }
         val uri = item.launchIntentUri
         if (!uri.isNullOrBlank()) {
             try {
@@ -207,19 +222,7 @@ class OverlayPanelView(
             } catch (_: Exception) {
             }
         }
-        val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return
-        val opts = android.app.ActivityOptions.makeBasic().toBundle()
-        try {
-            launcherApps.startShortcut(
-                item.packageName,
-                item.shortcutId,
-                null,
-                opts,
-                Process.myUserHandle(),
-            )
-        } catch (_: Exception) {
-            launchApp(item.packageName)
-        }
+        launchApp(item.packageName)
     }
 
     private fun createWidgetView(item: OverlayItem.WidgetSlot): View {
