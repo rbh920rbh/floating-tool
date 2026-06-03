@@ -30,6 +30,12 @@ class MainActivity : AppCompatActivity() {
         refreshUi()
     }
 
+    private val accessibilitySettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        refreshUi()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -40,6 +46,10 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<MaterialButton>(R.id.btn_overlay_permission).setOnClickListener {
             openOverlaySettings()
+        }
+
+        findViewById<MaterialButton>(R.id.btn_accessibility_permission).setOnClickListener {
+            openAccessibilitySettings()
         }
 
         findViewById<MaterialButton>(R.id.btn_toggle_overlay).setOnClickListener {
@@ -102,6 +112,15 @@ class MainActivity : AppCompatActivity() {
         overlaySettingsLauncher.launch(intent)
     }
 
+    private fun openAccessibilitySettings() {
+        Toast.makeText(
+            this,
+            getString(R.string.accessibility_settings_hint, getString(R.string.app_name)),
+            Toast.LENGTH_LONG,
+        ).show()
+        accessibilitySettingsLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
     private fun toggleOverlay() {
         if (FloatingOverlayService.isRunning) {
             stopService(Intent(this, FloatingOverlayService::class.java))
@@ -135,6 +154,8 @@ class MainActivity : AppCompatActivity() {
     private fun refreshUi() {
         val hasOverlay = Settings.canDrawOverlays(this)
         findViewById<SwitchMaterial>(R.id.switch_overlay_granted).isChecked = hasOverlay
+        findViewById<SwitchMaterial>(R.id.switch_accessibility_granted).isChecked =
+            AccessibilityServiceHelper.isEnabled(this)
         findViewById<MaterialButton>(R.id.btn_toggle_overlay).text = getString(
             if (FloatingOverlayService.isRunning) R.string.stop_floating_panel
             else R.string.start_floating_panel,

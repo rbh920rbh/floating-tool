@@ -49,6 +49,29 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/switch_overlay_granted" />
 
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/switch_accessibility_granted"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:text="@string/accessibility_permission_label"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_overlay_permission" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_accessibility_permission"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/open_accessibility_settings"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/switch_accessibility_granted" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_toggle_overlay"
         android:layout_width="0dp"
@@ -57,6 +80,6 @@
         android:text="@string/start_floating_panel"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btn_overlay_permission" />
+        app:layout_constraintTop_toBottomOf="@id/btn_accessibility_permission" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

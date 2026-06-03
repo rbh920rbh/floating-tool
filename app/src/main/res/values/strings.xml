@@ -5,6 +5,10 @@
     <string name="main_subtitle">启动半透明悬浮框，长按可添加快捷方式或小组件（测试版）。</string>
     <string name="overlay_permission_label">悬浮窗权限已授予</string>
     <string name="open_overlay_settings">打开悬浮窗权限设置</string>
+    <string name="accessibility_permission_label">无障碍服务已开启</string>
+    <string name="open_accessibility_settings">打开无障碍服务设置</string>
+    <string name="accessibility_settings_hint">在列表中找到「%1$s」，开启本应用的无障碍服务后返回</string>
+    <string name="accessibility_service_description">用于测试读取应用长按菜单；开启后不会自动点击或读取屏幕内容。</string>
     <string name="start_floating_panel">显示悬浮框</string>
     <string name="stop_floating_panel">关闭悬浮框</string>
     <string name="overlay_permission_required">请先授予「在其他应用上层显示」权限</string>
