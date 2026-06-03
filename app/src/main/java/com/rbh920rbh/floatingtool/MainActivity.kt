@@ -68,12 +68,20 @@ class MainActivity : AppCompatActivity() {
     private fun handlePickerIntent(intent: Intent?) {
         when (intent?.action) {
             ACTION_OPEN_WIDGET_PICKER -> {
-                startActivity(Intent(this, WidgetPickerActivity::class.java))
+                startActivity(
+                    Intent(this, WidgetPickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                if (!isTaskRoot) moveTaskToBack(true)
             }
             ACTION_OPEN_SUBMENU_PICKER -> {
-                startActivity(Intent(this, AppSubmenuPickerActivity::class.java))
+                startActivity(
+                    Intent(this, AppSubmenuPickerActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                if (!isTaskRoot) moveTaskToBack(true)
             }
         }
+        setIntent(Intent(this, javaClass))
     }
 
     private fun requestNotificationPermissionIfNeeded() {

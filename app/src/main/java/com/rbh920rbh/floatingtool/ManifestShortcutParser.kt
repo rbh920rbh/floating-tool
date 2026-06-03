@@ -3,11 +3,11 @@ package com.rbh920rbh.floatingtool
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.os.Build
 import org.xmlpull.v1.XmlPullParser
 
 /**
- * 非桌面应用无法使用 LauncherApps.getShortcuts 时的回退方案：
- * 从目标应用 APK 的 shortcuts.xml（android.app.shortcuts）解析静态菜单项。
+ * 从目标应用 APK 的 shortcuts.xml 解析静态菜单项；并回退扫描已导出的 Activity 入口。
  */
 object ManifestShortcutParser {
 
@@ -21,67 +21,120 @@ object ManifestShortcutParser {
         packageManager: PackageManager,
         packageName: String,
     ): List<ParsedShortcut> {
-        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            setPackage(packageName)
-        }
-        val flags = PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_META_DATA
-        @Suppress("DEPRECATION")
-        val activities = packageManager.queryIntentActivities(launcherIntent, flags)
-        if (activities.isEmpty()) return emptyList()
-
+        val result = linkedMapOf<String, ParsedShortcut>()
         val resources = try {
             packageManager.getResourcesForApplication(packageName)
         } catch (_: Exception) {
             return emptyList()
         }
 
-        val result = linkedMapOf<String, ParsedShortcut>()
-        for (resolve in activities) {
-            val meta = resolve.activityInfo.metaData ?: continue
-            val xmlResId = meta.getInt(META_SHORTCUTS, 0)
-            if (xmlResId == 0) continue
-            parseShortcutsXml(resources, xmlResId).forEach { shortcut ->
-                result.putIfAbsent(shortcut.shortcutId, shortcut)
-            }
-        }
-        try {
-            val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
-            val appXml = appInfo.metaData?.getInt(META_SHORTCUTS, 0) ?: 0
-            if (appXml != 0) {
-                parseShortcutsXml(resources, appXml).forEach { shortcut ->
-                    result.putIfAbsent(shortcut.shortcutId, shortcut)
-                }
-            }
-        } catch (_: Exception) {
-        }
+        collectFromManifestMeta(packageManager, packageName, resources, result)
+        collectFromExportedActivities(packageManager, packageName, result)
         return result.values.sortedBy { it.label.lowercase() }
     }
 
-    private fun parseShortcutsXml(resources: Resources, xmlResId: Int): List<ParsedShortcut> {
+    private fun collectFromManifestMeta(
+        packageManager: PackageManager,
+        packageName: String,
+        resources: Resources,
+        result: MutableMap<String, ParsedShortcut>,
+    ) {
+        val flags = PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES
+        val pkgInfo = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.PackageInfoFlags.of(flags.toLong()),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, flags)
+            }
+        } catch (_: Exception) {
+            return
+        }
+
+        pkgInfo.applicationInfo?.metaData?.getInt(META_SHORTCUTS, 0)?.takeIf { it != 0 }?.let { resId ->
+            parseShortcutsXml(resources, resId, packageName).forEach { result.putIfAbsent(it.shortcutId, it) }
+        }
+
+        @Suppress("DEPRECATION")
+        val activities = pkgInfo.activities ?: emptyArray()
+        for (activity in activities) {
+            val xmlResId = activity.metaData?.getInt(META_SHORTCUTS, 0) ?: 0
+            if (xmlResId == 0) continue
+            parseShortcutsXml(resources, xmlResId, packageName).forEach { result.putIfAbsent(it.shortcutId, it) }
+        }
+    }
+
+    private fun collectFromExportedActivities(
+        packageManager: PackageManager,
+        packageName: String,
+        result: MutableMap<String, ParsedShortcut>,
+    ) {
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            setPackage(packageName)
+        }
+        @Suppress("DEPRECATION")
+        val launcherNames = packageManager.queryIntentActivities(launcherIntent, 0)
+            .map { it.activityInfo.name }
+            .toSet()
+
+        val flags = PackageManager.GET_ACTIVITIES
+        val pkgInfo = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.PackageInfoFlags.of(flags.toLong()),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, flags)
+            }
+        } catch (_: Exception) {
+            return
+        }
+
+        @Suppress("DEPRECATION")
+        for (activity in pkgInfo.activities ?: emptyArray()) {
+            if (!activity.exported) continue
+            if (activity.name in launcherNames) continue
+            if (activity.name.contains("Widget", ignoreCase = true)) continue
+            if (activity.name.contains("Provider", ignoreCase = true)) continue
+            val label = activity.loadLabel(packageManager)?.toString()?.takeIf { it.isNotBlank() }
+                ?: continue
+            val intent = Intent().apply {
+                setClassName(packageName, activity.name)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val id = "activity:${activity.name}"
+            result.putIfAbsent(
+                id,
+                ParsedShortcut(id, label, intent.toUri(Intent.URI_INTENT_SCHEME)),
+            )
+        }
+    }
+
+    private fun parseShortcutsXml(
+        resources: Resources,
+        xmlResId: Int,
+        packageName: String,
+    ): List<ParsedShortcut> {
         val shortcuts = mutableListOf<ParsedShortcut>()
         val parser = resources.getXml(xmlResId)
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             if (event == XmlPullParser.START_TAG && parser.name == TAG_SHORTCUT) {
+                val enabled = parser.getAttributeValue(ANDROID_NS, ATTR_ENABLED)
+                if (enabled == "false") {
+                    event = parser.next()
+                    continue
+                }
                 val id = parser.getAttributeValue(ANDROID_NS, ATTR_SHORTCUT_ID) ?: ""
                 if (id.isNotBlank()) {
-                    val shortLabelRes = parser.getAttributeResourceValue(
-                        ANDROID_NS,
-                        ATTR_SHORT_LABEL,
-                        0,
-                    )
-                    val longLabelRes = parser.getAttributeResourceValue(
-                        ANDROID_NS,
-                        ATTR_LONG_LABEL,
-                        0,
-                    )
-                    val label = when {
-                        shortLabelRes != 0 -> resources.getString(shortLabelRes)
-                        longLabelRes != 0 -> resources.getString(longLabelRes)
-                        else -> id
-                    }
-                    val intentUri = readShortcutIntent(parser)
+                    val label = readShortcutLabel(parser, resources) ?: id
+                    val intentUri = readShortcutIntent(parser, packageName)
                     shortcuts.add(ParsedShortcut(id, label, intentUri))
                 }
             }
@@ -90,22 +143,49 @@ object ManifestShortcutParser {
         return shortcuts
     }
 
-    private fun readShortcutIntent(parser: XmlPullParser): String? {
-        var depth = parser.depth
+    private fun readShortcutLabel(parser: XmlPullParser, resources: Resources): String? {
+        val shortText = parser.getAttributeValue(ANDROID_NS, ATTR_SHORT_LABEL)
+        if (!shortText.isNullOrBlank()) return shortText
+        val longText = parser.getAttributeValue(ANDROID_NS, ATTR_LONG_LABEL)
+        if (!longText.isNullOrBlank()) return longText
+        val shortRes = parser.getAttributeResourceValue(ANDROID_NS, ATTR_SHORT_LABEL, 0)
+        if (shortRes != 0) return resources.getString(shortRes)
+        val longRes = parser.getAttributeResourceValue(ANDROID_NS, ATTR_LONG_LABEL, 0)
+        if (longRes != 0) return resources.getString(longRes)
+        return null
+    }
+
+    private fun readShortcutIntent(parser: XmlPullParser, packageName: String): String? {
+        val startDepth = parser.depth
         var event = parser.next()
-        while (event != XmlPullParser.END_DOCUMENT && parser.depth > depth) {
+        while (event != XmlPullParser.END_DOCUMENT && parser.depth > startDepth) {
             if (event == XmlPullParser.START_TAG && parser.name == TAG_INTENT) {
                 val intent = Intent()
                 var inner = parser.next()
-                while (inner != XmlPullParser.END_DOCUMENT && parser.depth > depth + 1) {
+                while (inner != XmlPullParser.END_DOCUMENT && parser.depth > startDepth + 1) {
                     if (inner == XmlPullParser.START_TAG) {
                         when (parser.name) {
                             TAG_ACTION -> intent.action = parser.nextText()
                             TAG_CATEGORY -> intent.addCategory(parser.nextText())
+                            TAG_COMPONENT -> {
+                                val cls = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
+                                if (!cls.isNullOrBlank()) {
+                                    intent.setClassName(packageName, cls)
+                                }
+                            }
                             TAG_DATA -> {
                                 val scheme = parser.getAttributeValue(ANDROID_NS, ATTR_SCHEME)
-                                if (!scheme.isNullOrBlank()) intent.data =
-                                    android.net.Uri.parse("$scheme:")
+                                val host = parser.getAttributeValue(ANDROID_NS, "host")
+                                val path = parser.getAttributeValue(ANDROID_NS, "path")
+                                if (!scheme.isNullOrBlank()) {
+                                    val uri = buildString {
+                                        append(scheme)
+                                        append("://")
+                                        if (!host.isNullOrBlank()) append(host)
+                                        if (!path.isNullOrBlank()) append(path)
+                                    }
+                                    intent.data = android.net.Uri.parse(uri)
+                                }
                             }
                             TAG_EXTRA -> {
                                 val name = parser.getAttributeValue(ANDROID_NS, ATTR_NAME)
@@ -117,6 +197,9 @@ object ManifestShortcutParser {
                         }
                     }
                     inner = parser.next()
+                }
+                if (intent.component == null && intent.`package` == null) {
+                    intent.setPackage(packageName)
                 }
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 return intent.toUri(Intent.URI_INTENT_SCHEME)
@@ -132,11 +215,13 @@ object ManifestShortcutParser {
     private const val TAG_INTENT = "intent"
     private const val TAG_ACTION = "action"
     private const val TAG_CATEGORY = "category"
+    private const val TAG_COMPONENT = "component"
     private const val TAG_DATA = "data"
     private const val TAG_EXTRA = "extra"
     private const val ATTR_SHORTCUT_ID = "shortcutId"
     private const val ATTR_SHORT_LABEL = "shortcutShortLabel"
     private const val ATTR_LONG_LABEL = "shortcutLongLabel"
+    private const val ATTR_ENABLED = "enabled"
     private const val ATTR_SCHEME = "scheme"
     private const val ATTR_NAME = "name"
     private const val ATTR_VALUE = "value"

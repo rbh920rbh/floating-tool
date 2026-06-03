@@ -7,6 +7,7 @@ import android.content.pm.ShortcutInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.view.View
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -72,14 +73,6 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         showAppList()
     }
 
-    override fun onBackPressed() {
-        if (showingShortcuts) {
-            showAppList()
-            return
-        }
-        super.onBackPressed()
-    }
-
     private fun ensureShortcutAccessPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         if (ContextCompat.checkSelfPermission(this, PERMISSION_ACCESS_SHORTCUTS)
@@ -92,6 +85,8 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
 
     private fun showAppList() {
         showingShortcuts = false
+        findViewById<View>(R.id.tv_empty_state).visibility = View.GONE
+        findViewById<RecyclerView>(R.id.recycler_apps).visibility = View.VISIBLE
         findViewById<TextView>(R.id.tv_picker_title).text = getString(R.string.picker_submenu_pick_app)
         val hint = if (hasShortcutHostPermission) {
             getString(R.string.submenu_source_launcher, appEntries.size)
@@ -107,15 +102,21 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         shortcutEntries = loadShortcuts(packageName)
         findViewById<TextView>(R.id.tv_picker_title).text =
             getString(R.string.picker_submenu_pick_item, appLabel)
+        val emptyView = findViewById<TextView>(R.id.tv_empty_state)
+        val listView = findViewById<RecyclerView>(R.id.recycler_apps)
         if (shortcutEntries.isEmpty()) {
             findViewById<TextView>(R.id.tv_picker_subtitle).text =
                 getString(R.string.error_no_submenu_items)
-            Toast.makeText(this, R.string.error_no_submenu_items, Toast.LENGTH_LONG).show()
+            listView.visibility = View.GONE
+            emptyView.visibility = View.VISIBLE
+            emptyView.text = getString(R.string.error_no_submenu_items_detail)
         } else {
             findViewById<TextView>(R.id.tv_picker_subtitle).text =
                 getString(R.string.picker_submenu_count, shortcutEntries.size)
+            emptyView.visibility = View.GONE
+            listView.visibility = View.VISIBLE
+            adapter.submitShortcuts(shortcutEntries)
         }
-        adapter.submitShortcuts(shortcutEntries)
     }
 
     private fun onRowClicked(entry: RowEntry) {
@@ -133,9 +134,25 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
                     ),
                 )
                 sendItemsChanged()
-                finish()
+                closePicker()
             }
         }
+    }
+
+    private fun closePicker() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            finishAndRemoveTask()
+        } else {
+            finish()
+        }
+    }
+
+    override fun onBackPressed() {
+        if (showingShortcuts) {
+            showAppList()
+            return
+        }
+        closePicker()
     }
 
     private fun filterRows(query: String) {
@@ -189,10 +206,6 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private fun loadShortcuts(packageName: String): List<ShortcutEntry> {
         val merged = linkedMapOf<String, ShortcutEntry>()
 
-        if (hasShortcutHostPermission) {
-            loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
-        }
-
         ManifestShortcutParser.loadStaticShortcuts(packageManager, packageName).forEach { parsed ->
             merged.putIfAbsent(
                 parsed.shortcutId,
@@ -204,6 +217,10 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
                     icon = loadAppIcon(packageName),
                 ),
             )
+        }
+
+        if (hasShortcutHostPermission) {
+            loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
         }
 
         return merged.values.sortedBy { it.label.lowercase() }

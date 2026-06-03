@@ -49,12 +49,18 @@
 
         <activity
             android:name=".AppPickerActivity"
+            android:excludeFromRecents="true"
             android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.rbh920rbh.floatingtool.picker"
             android:theme="@style/Theme.FloatingTool" />
 
         <activity
             android:name=".AppSubmenuPickerActivity"
+            android:excludeFromRecents="true"
             android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.rbh920rbh.floatingtool.picker"
             android:theme="@style/Theme.FloatingTool" />
 
         <activity
@@ -62,6 +68,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"
+            android:taskAffinity="com.rbh920rbh.floatingtool.picker"
             android:theme="@style/Theme.FloatingTool" />
 
         <service

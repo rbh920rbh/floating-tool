@@ -38,7 +38,11 @@ class AppPickerActivity : AppCompatActivity() {
                 ),
             )
             sendItemsChanged()
-            finish()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask()
+            } else {
+                finish()
+            }
         }
 
         findViewById<RecyclerView>(R.id.recycler_apps).apply {

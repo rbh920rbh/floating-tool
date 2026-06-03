@@ -220,11 +220,8 @@ class FloatingOverlayService : Service(), OverlayPanelView.Callbacks {
 
     private fun startPickerActivity(activityClass: Class<*>) {
         val intent = Intent(this, activityClass).apply {
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
-            )
+            // 勿使用 CLEAR_TOP，否则会闪回 MainActivity
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
             startActivity(intent)
