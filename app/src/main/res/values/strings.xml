@@ -45,12 +45,8 @@
     <string name="picker_submenu_pick_item">选择「%1$s」的菜单项</string>
     <string name="picker_submenu_count">共 %1$d 个菜单项</string>
     <string name="error_no_submenu_items">该应用没有可添加的菜单项</string>
-    <string name="error_no_submenu_items_detail">未找到菜单项。请先点上方「读取完整长按菜单」并临时将本应用设为默认桌面（与桌面长按同一权限），选完微信等应用后再换回原来的桌面。仍没有则可返回换其他应用。</string>
-    <string name="submenu_source_launcher">共 %1$d 个应用 · 已获系统快捷方式权限</string>
-    <string name="submenu_source_manifest">共 %1$d 个应用 · 将读取应用内声明的静态菜单</string>
-    <string name="submenu_source_access_shortcuts">共 %1$d 个应用 · 使用与桌面相同的数据接口读取菜单</string>
-    <string name="btn_enable_full_submenu">读取完整长按菜单（临时设为默认桌面）</string>
-    <string name="submenu_role_result">请重新选择应用；若已设为默认桌面，应能看到完整菜单。用完后可在系统设置换回原来的桌面。</string>
-    <string name="submenu_role_unavailable">当前无法申请桌面角色，请检查系统设置</string>
+    <string name="error_no_submenu_items_detail">未找到菜单项。本应用通过系统 ACCESS_SHORTCUTS 权限读取（与常见工具应用相同）。微信等若仍为空，可能是厂商限制向第三方开放动态菜单；可换其他应用试，或使用「应用快捷方式」。</string>
+    <string name="submenu_source_access_shortcuts">共 %1$d 个应用 · 通过系统快捷方式接口读取长按菜单</string>
+    <string name="submenu_api30_hint">完整动态菜单需要 Android 11 及以上（ACCESS_SHORTCUTS）</string>
     <string name="error_submenu_api">应用菜单项需要 Android 7.1 及以上</string>
 </resources>

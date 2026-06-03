@@ -20,8 +20,8 @@ android {
         applicationId = "com.rbh920rbh.floatingtool"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.6.0"
+        versionCode = 13
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

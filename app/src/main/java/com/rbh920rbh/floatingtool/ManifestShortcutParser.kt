@@ -7,9 +7,7 @@ import android.content.res.XmlResourceParser
 import android.os.Build
 import org.xmlpull.v1.XmlPullParser
 
-/**
- * 从目标应用 APK 的 shortcuts.xml 解析静态菜单项；并回退扫描已导出的 Activity 入口。
- */
+/** 从目标应用 APK 的 shortcuts.xml 解析静态菜单项（补充 [LauncherApps] 读不到的项）。 */
 object ManifestShortcutParser {
 
     data class ParsedShortcut(
@@ -30,7 +28,6 @@ object ManifestShortcutParser {
         }
 
         collectFromManifestMeta(packageManager, packageName, resources, result)
-        collectFromExportedActivities(packageManager, packageName, result)
         return result.values.sortedBy { it.label.lowercase() }
     }
 
@@ -65,55 +62,6 @@ object ManifestShortcutParser {
             val xmlResId = activity.metaData?.getInt(META_SHORTCUTS, 0) ?: 0
             if (xmlResId == 0) continue
             parseShortcutsXml(resources, xmlResId, packageName).forEach { result.putIfAbsent(it.shortcutId, it) }
-        }
-    }
-
-    private fun collectFromExportedActivities(
-        packageManager: PackageManager,
-        packageName: String,
-        result: MutableMap<String, ParsedShortcut>,
-    ) {
-        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            setPackage(packageName)
-        }
-        @Suppress("DEPRECATION")
-        val launcherNames = packageManager.queryIntentActivities(launcherIntent, 0)
-            .map { it.activityInfo.name }
-            .toSet()
-
-        val flags = PackageManager.GET_ACTIVITIES
-        val pkgInfo = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.PackageInfoFlags.of(flags.toLong()),
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, flags)
-            }
-        } catch (_: Exception) {
-            return
-        }
-
-        @Suppress("DEPRECATION")
-        for (activity in pkgInfo.activities ?: emptyArray()) {
-            if (!activity.exported) continue
-            if (activity.name in launcherNames) continue
-            if (activity.name.contains("Widget", ignoreCase = true)) continue
-            if (activity.name.contains("Provider", ignoreCase = true)) continue
-            val label = activity.loadLabel(packageManager)?.toString()?.takeIf { it.isNotBlank() }
-                ?: continue
-            val intent = Intent().apply {
-                setClassName(packageName, activity.name)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            val id = "activity:${activity.name}"
-            result.putIfAbsent(
-                id,
-                ParsedShortcut(id, label, intent.toUri(Intent.URI_INTENT_SCHEME)),
-            )
         }
     }
 
