@@ -7,7 +7,6 @@ import android.content.pm.ShortcutInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
-import android.view.View
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater

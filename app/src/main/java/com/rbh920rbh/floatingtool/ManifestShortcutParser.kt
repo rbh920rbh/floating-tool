@@ -3,6 +3,7 @@ package com.rbh920rbh.floatingtool
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.content.res.XmlResourceParser
 import android.os.Build
 import org.xmlpull.v1.XmlPullParser
 
@@ -145,13 +146,24 @@ object ManifestShortcutParser {
 
     private fun readShortcutLabel(parser: XmlPullParser, resources: Resources): String? {
         val shortText = parser.getAttributeValue(ANDROID_NS, ATTR_SHORT_LABEL)
-        if (!shortText.isNullOrBlank()) return shortText
+        if (!shortText.isNullOrBlank() && !shortText.startsWith("@")) return shortText
         val longText = parser.getAttributeValue(ANDROID_NS, ATTR_LONG_LABEL)
-        if (!longText.isNullOrBlank()) return longText
-        val shortRes = parser.getAttributeResourceValue(ANDROID_NS, ATTR_SHORT_LABEL, 0)
-        if (shortRes != 0) return resources.getString(shortRes)
-        val longRes = parser.getAttributeResourceValue(ANDROID_NS, ATTR_LONG_LABEL, 0)
-        if (longRes != 0) return resources.getString(longRes)
+        if (!longText.isNullOrBlank() && !longText.startsWith("@")) return longText
+        val xmlParser = parser as? XmlResourceParser ?: return null
+        val shortRes = xmlParser.getAttributeResourceValue(ANDROID_NS, ATTR_SHORT_LABEL, 0)
+        if (shortRes != 0) {
+            try {
+                return resources.getString(shortRes)
+            } catch (_: Exception) {
+            }
+        }
+        val longRes = xmlParser.getAttributeResourceValue(ANDROID_NS, ATTR_LONG_LABEL, 0)
+        if (longRes != 0) {
+            try {
+                return resources.getString(longRes)
+            } catch (_: Exception) {
+            }
+        }
         return null
     }
 
