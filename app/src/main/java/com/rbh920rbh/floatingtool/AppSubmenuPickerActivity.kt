@@ -1,6 +1,5 @@
 package com.rbh920rbh.floatingtool
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
@@ -83,12 +82,12 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
 
     private fun ensureShortcutAccessPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_SHORTCUTS)
+        if (ContextCompat.checkSelfPermission(this, PERMISSION_ACCESS_SHORTCUTS)
             == PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
-        requestPermissions(arrayOf(Manifest.permission.ACCESS_SHORTCUTS), REQUEST_ACCESS_SHORTCUTS)
+        requestPermissions(arrayOf(PERMISSION_ACCESS_SHORTCUTS), REQUEST_ACCESS_SHORTCUTS)
     }
 
     private fun showAppList() {
@@ -325,6 +324,8 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** API 30+，部分 compileSdk 未导出 Manifest.permission 常量 */
+        private const val PERMISSION_ACCESS_SHORTCUTS = "android.permission.ACCESS_SHORTCUTS"
         private const val REQUEST_ACCESS_SHORTCUTS = 2002
     }
 }
