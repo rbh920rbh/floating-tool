@@ -1,5 +1,6 @@
 package com.rbh920rbh.floatingtool
 
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
@@ -9,6 +10,7 @@ import android.os.Bundle
 import android.os.Process
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,11 +18,13 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 
 /**
  * 两步：先选应用，再选该应用在桌面长按菜单中暴露的快捷方式。
@@ -34,6 +38,13 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private var showingShortcuts = false
     private var hasShortcutHostPermission = false
 
+    private val requestHomeRoleLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        refreshShortcutAccessState()
+        Toast.makeText(this, R.string.submenu_role_result, Toast.LENGTH_LONG).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_app_picker)
@@ -46,8 +57,12 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
 
         ensureShortcutAccessPermission()
 
-        val launcherApps = getSystemService(LauncherApps::class.java)
-        hasShortcutHostPermission = launcherApps?.hasShortcutHostPermission() == true
+        refreshShortcutAccessState()
+
+        findViewById<MaterialButton>(R.id.btn_submenu_full_access).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { requestFullShortcutAccess() }
+        }
 
         adapter = RowAdapter(emptyList()) { entry -> onRowClicked(entry) }
         findViewById<RecyclerView>(R.id.recycler_apps).apply {
@@ -82,17 +97,36 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         requestPermissions(arrayOf(PERMISSION_ACCESS_SHORTCUTS), REQUEST_ACCESS_SHORTCUTS)
     }
 
+    private fun refreshShortcutAccessState() {
+        val launcherApps = getSystemService(LauncherApps::class.java)
+        hasShortcutHostPermission = launcherApps?.hasShortcutHostPermission() == true
+    }
+
+    private fun requestFullShortcutAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME) && !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                requestHomeRoleLauncher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
+                return
+            }
+        }
+        Toast.makeText(this, R.string.submenu_role_unavailable, Toast.LENGTH_LONG).show()
+    }
+
     private fun showAppList() {
         showingShortcuts = false
+        refreshShortcutAccessState()
         findViewById<View>(R.id.tv_empty_state).visibility = View.GONE
         findViewById<RecyclerView>(R.id.recycler_apps).visibility = View.VISIBLE
         findViewById<TextView>(R.id.tv_picker_title).text = getString(R.string.picker_submenu_pick_app)
         val hint = if (hasShortcutHostPermission) {
             getString(R.string.submenu_source_launcher, appEntries.size)
         } else {
-            getString(R.string.submenu_source_manifest, appEntries.size)
+            getString(R.string.submenu_source_access_shortcuts, appEntries.size)
         }
         findViewById<TextView>(R.id.tv_picker_subtitle).text = hint
+        findViewById<MaterialButton>(R.id.btn_submenu_full_access).visibility =
+            if (hasShortcutHostPermission) View.GONE else View.VISIBLE
         adapter.submitApps(appEntries)
     }
 
@@ -205,6 +239,9 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private fun loadShortcuts(packageName: String): List<ShortcutEntry> {
         val merged = linkedMapOf<String, ShortcutEntry>()
 
+        // 与桌面相同 API：LauncherApps（含微信等动态长按菜单）
+        loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
+
         ManifestShortcutParser.loadStaticShortcuts(packageManager, packageName).forEach { parsed ->
             merged.putIfAbsent(
                 parsed.shortcutId,
@@ -218,10 +255,6 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
             )
         }
 
-        if (hasShortcutHostPermission) {
-            loadLauncherShortcuts(packageName).forEach { merged[it.shortcutId] = it }
-        }
-
         return merged.values.sortedBy { it.label.lowercase() }
     }
 
@@ -229,17 +262,18 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     private fun loadLauncherShortcuts(packageName: String): List<ShortcutEntry> {
         val launcherApps = getSystemService(LauncherApps::class.java) ?: return emptyList()
         val user = Process.myUserHandle()
+        val queryFlags = buildShortcutQueryFlags()
         val query = LauncherApps.ShortcutQuery().apply {
             setPackage(packageName)
-            setQueryFlags(
-                LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
-            )
+            setQueryFlags(queryFlags)
         }
         val shortcuts = try {
             launcherApps.getShortcuts(query, user) ?: emptyList()
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            Log.w(TAG, "getShortcuts denied for $packageName", e)
+            emptyList()
+        } catch (e: Exception) {
+            Log.w(TAG, "getShortcuts failed for $packageName", e)
             emptyList()
         }
         return shortcuts.mapNotNull { shortcut ->
@@ -339,7 +373,19 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
         override fun getItemCount(): Int = rows.size
     }
 
+    private fun buildShortcutQueryFlags(): Int {
+        var flags = LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
+            LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            flags = flags or LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER
+        }
+        return flags
+    }
+
     companion object {
+        private const val TAG = "AppSubmenuPicker"
         /** API 30+，部分 compileSdk 未导出 Manifest.permission 常量 */
         private const val PERMISSION_ACCESS_SHORTCUTS = "android.permission.ACCESS_SHORTCUTS"
         private const val REQUEST_ACCESS_SHORTCUTS = 2002
