@@ -263,19 +263,22 @@ class AppSubmenuPickerActivity : AppCompatActivity() {
     }
 
     private fun shortcutQueryFlagSets(): List<Int> {
-        val q = LauncherApps.ShortcutQuery
         val list = mutableListOf(
-            q.FLAG_MATCH_MANIFEST,
-            q.FLAG_MATCH_DYNAMIC,
-            q.FLAG_MATCH_PINNED,
-            q.FLAG_MATCH_CACHED,
-            q.FLAG_MATCH_MANIFEST or q.FLAG_MATCH_DYNAMIC or q.FLAG_MATCH_PINNED,
+            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST,
+            LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC,
+            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
+            LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED,
+            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            list.add(q.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER)
+            list.add(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER)
             list.add(
-                q.FLAG_MATCH_MANIFEST or q.FLAG_MATCH_DYNAMIC or q.FLAG_MATCH_PINNED or
-                    q.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER,
+                LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER,
             )
         }
         return list.distinct()
